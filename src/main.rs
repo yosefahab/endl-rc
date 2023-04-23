@@ -1,36 +1,38 @@
-use std::io;
+use std::{error::Error, io::stdout};
 
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use tui::backend::CrosstermBackend;
-use tui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 
+mod client;
 mod models;
+use models::app::Session;
 mod view;
-use models::AppState;
 use view::run_app;
-
-fn main() -> Result<(), io::Error> {
+fn main() -> Result<(), Box<dyn Error>> {
+    // setup terminal
     enable_raw_mode()?;
-    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(io::stdout());
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-    let result = run_app(&mut terminal, AppState::default());
+
+    let result = run_app(&mut terminal, &mut Session::default());
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
     )?;
+    terminal.show_cursor()?;
 
-    match result {
-        Err(e) => {
-            eprintln!("{}", e.to_string());
-            Err(e)
-        }
-        Ok(_) => Ok(()),
+    if let Err(err) = result {
+        println!("{:?}", err)
     }
+
+    Ok(())
 }

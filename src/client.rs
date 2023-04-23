@@ -1,6 +1,11 @@
+#![allow(unused)]
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
+
+pub fn get_invite_link() -> String {
+    String::from("")
+}
 
 fn handle_client(stream: TcpStream) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
