@@ -2,7 +2,7 @@ use crate::{
     client,
     models::{
         app::{InputMode, Session},
-        commands::{Command, CommandResult},
+        commands::Command,
         message::Message,
     },
 };
@@ -21,6 +21,9 @@ use std::io;
 use tui_input::{backend::crossterm::EventHandler, Input};
 
 const COLOR_CLU: Color = Color::Rgb(235, 124, 57);
+const COLOR_TRON: Color = Color::LightBlue;
+const BORDER_TYPE: BorderType = BorderType::Rounded;
+const BORDERS_DIR: Borders = Borders::ALL;
 
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io::Result<()> {
     loop {
@@ -45,8 +48,8 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io:
                     KeyCode::Esc => app.input_mode.set(InputMode::Normal),
                     KeyCode::Enter => {
                         match execute_cmd(&mut app.command_buffer.value().to_string()) {
-                            CommandResult::QuitSig => return Ok(()),
-                            CommandResult::Ok() => return Ok(()),
+                            Ok(()) => app.input_mode.set(InputMode::Normal),
+                            Err(()) => return Ok(()),
                         }
                     }
                     _ => {
@@ -54,15 +57,13 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io:
                     }
                 },
                 InputMode::Typing => match key.code {
-                    KeyCode::Esc => {
-                        app.input_mode.set(InputMode::Normal);
-                    }
+                    KeyCode::Esc => app.input_mode.set(InputMode::Normal),
                     KeyCode::Enter => {
                         // todo: send message
                         app.messages.push(Message {
-                            user_id: 0,
+                            user_id: 0, // root user
                             content: app.text_buffer.value().into(),
-                            color: app.users.get(0).unwrap().color,
+                            color: app.root_user().color,
                         });
                         app.text_buffer.reset();
                     }
@@ -74,22 +75,21 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io:
         }
     }
 }
-fn execute_cmd(cmd: &mut str) -> CommandResult {
+fn execute_cmd(cmd: &mut str) -> Result<(), ()> {
     match parse_cmd(cmd) {
-        Command::Quit => CommandResult::QuitSig,
         Command::Invite => {
             client::get_invite_link();
-            CommandResult::Ok()
+            Ok(())
         }
         // todo
-        Command::Unknown => CommandResult::Ok(),
+        Command::Unknown => Ok(()),
     }
 }
 fn parse_cmd(cmd: &mut str) -> Command {
     // todo: parse and execute command
     let words: Vec<&str> = cmd.split_whitespace().collect();
-    if let Some(&"q") = words.first() {
-        return Command::Quit;
+    if let Some(&"inv") = words.first() {
+        return Command::Invite;
     }
     Command::Unknown
 }
@@ -106,7 +106,7 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
         .map(|m| {
             let content = vec![Spans::from(Span::raw(format!(
                 " <{}> {}",
-                app.users.get(m.user_id).unwrap().name,
+                app.nth_user(m.user_id).name,
                 m.content
             )))];
             ListItem::new(content)
@@ -114,11 +114,11 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
         .collect();
     let messages = List::new(messages).block(
         Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+            .borders(BORDERS_DIR)
+            .border_type(BORDER_TYPE)
             .title("Chat")
             .title_alignment(Alignment::Center)
-            .style(Style::default().fg(Color::LightBlue)),
+            .style(Style::default().fg(COLOR_TRON)),
     );
     frame.render_widget(messages, parent[0]);
 
@@ -147,15 +147,15 @@ fn textbox<'a>(state: &InputMode, input: &'a Input, scroll: usize) -> Paragraph<
     let text = input.value();
     let style = match state {
         InputMode::Typing => Style::default().fg(COLOR_CLU),
-        _ => Style::default().fg(Color::LightBlue),
+        _ => Style::default().fg(COLOR_TRON),
     };
     Paragraph::new(text)
         .style(style)
         .scroll((0, scroll as u16))
         .block(
             Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
+                .borders(BORDERS_DIR)
+                .border_type(BORDER_TYPE)
                 .title(state.to_string()),
         )
 }
@@ -172,14 +172,14 @@ Press t to enter Typing mode
 Press Esc to Switch back to Normal mode"#;
 
     let commands = construct_paragraph(COMMANDS);
-    display_popup(frame, commands);
+    display_popup(frame, "Welcome to the End of Line Club", commands);
 }
-fn display_popup<B: Backend>(frame: &mut Frame<B>, paragraph: Paragraph) {
+fn display_popup<B: Backend>(frame: &mut Frame<B>, title: &str, paragraph: Paragraph) {
     let prompt_block = Block::default()
-        .title("Welcome to the End of Line Club")
+        .title(title)
         .title_alignment(Alignment::Center)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .borders(BORDERS_DIR)
+        .border_type(BORDER_TYPE)
         .style(Style::default().fg(COLOR_CLU));
 
     let area = centered_rect(frame.size());

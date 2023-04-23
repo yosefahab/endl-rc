@@ -9,7 +9,7 @@ mod user {
     impl Default for User {
         fn default() -> Self {
             Self {
-                id: 0,
+                id: 0,                     // root user
                 name: String::from("You"), // todo: read user from file
                 color: Color::LightBlue,
             }
@@ -18,15 +18,9 @@ mod user {
 }
 
 pub mod commands {
-    #[allow(dead_code)]
     pub enum Command {
         Unknown,
-        Quit,
         Invite,
-    }
-    pub enum CommandResult {
-        Ok(),
-        QuitSig,
     }
 }
 
@@ -50,6 +44,14 @@ pub mod app {
         pub command_buffer: Input,
     }
 
+    impl Session {
+        pub fn root_user(&self) -> &User {
+            self.nth_user(0)
+        }
+        pub fn nth_user(&self, id: usize) -> &User {
+            self.users.get(id).unwrap()
+        }
+    }
     impl Default for Session {
         fn default() -> Self {
             Self {

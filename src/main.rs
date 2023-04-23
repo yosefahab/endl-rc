@@ -14,7 +14,7 @@ use models::app::Session;
 mod view;
 use view::run_app;
 fn main() -> Result<(), Box<dyn Error>> {
-    // setup terminal
+    // setup terminal, switching to an alternate screen and disabling mouse input
     enable_raw_mode()?;
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
