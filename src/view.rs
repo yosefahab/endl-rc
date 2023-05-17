@@ -1,23 +1,22 @@
 use crate::{
-    client,
+    client::server,
     models::{
-        app::{InputMode, Session},
+        app::{mode::InputMode, Session},
         commands::Command,
         message::Message,
     },
 };
-use crossterm::event::{read, Event, Event::Key, KeyCode};
+use crossterm::event::{read, Event, Event::Key, KeyCode, poll};
 use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::Span,
-    text::Spans,
+    style::{Color, Modifier, Style},
+    text::{Span, Spans},
     widgets::ListItem,
     widgets::{Block, BorderType, Borders, Clear, List, Paragraph, Wrap},
     Frame, Terminal,
 };
-use std::io;
+use std::{io, time::Duration};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
 const COLOR_CLU: Color = Color::Rgb(235, 124, 57);
@@ -28,96 +27,63 @@ const BORDERS_DIR: Borders = Borders::ALL;
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io::Result<()> {
     loop {
         terminal.draw(|frame| update_ui(frame, app))?;
-        // todo: add non blocking for recieving messages
+        if !poll(Duration::from_millis(100))? {
+           continue; 
+        }
+
         if let Key(key) = read()? {
             match app.input_mode {
                 InputMode::Prompt => match key.code {
-                    KeyCode::Char(':') => app.input_mode.set(InputMode::Command),
-                    KeyCode::Char('t') => app.input_mode.set(InputMode::Typing),
+                    KeyCode::Char(':') => app.switch_mode(InputMode::Command),
+                    KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
                     KeyCode::Char('q') => return Ok(()),
-                    _ => app.input_mode.set(InputMode::Normal),
+                    _ => app.switch_mode(InputMode::Normal)
                 },
                 InputMode::Normal => match key.code {
-                    KeyCode::Char(':') => app.input_mode.set(InputMode::Command),
-                    KeyCode::Char('t') => app.input_mode.set(InputMode::Typing),
+                    KeyCode::Char(':') => app.switch_mode(InputMode::Command),
+                    KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
+                    KeyCode::Char('h') => app.switch_mode(InputMode::Prompt),
                     KeyCode::Char('q') => return Ok(()),
                     // todo: other functionalities (scroll)
                     _ => (),
                 },
                 InputMode::Command => match key.code {
-                    KeyCode::Esc => app.input_mode.set(InputMode::Normal),
+                    KeyCode::Esc => app.switch_mode(InputMode::Normal),
                     KeyCode::Enter => {
                         match execute_cmd(&mut app.command_buffer.value().to_string()) {
-                            Ok(()) => app.input_mode.set(InputMode::Normal),
+                            Ok(()) => app.switch_mode(InputMode::Normal),
                             Err(()) => return Ok(()),
                         }
                     }
-                    _ => {
-                        app.command_buffer.handle_event(&Event::Key(key));
-                    }
+                    _ => { app.command_buffer.handle_event(&Event::Key(key)); }
                 },
                 InputMode::Typing => match key.code {
-                    KeyCode::Esc => app.input_mode.set(InputMode::Normal),
-                    KeyCode::Enter => {
-                        // todo: send message
-                        app.messages.push(Message {
-                            user_id: 0, // root user
-                            content: app.text_buffer.value().into(),
-                            color: app.root_user().color,
-                        });
-                        app.text_buffer.reset();
-                    }
-                    _ => {
-                        app.text_buffer.handle_event(&Event::Key(key));
-                    }
+                    KeyCode::Esc => app.switch_mode(InputMode::Normal),
+                    KeyCode::Enter => app.send_user_msg(app.root_user().id, app.text_buffer.value().into()),
+                    _ => { app.text_buffer.handle_event(&Event::Key(key)); }
                 },
             };
         }
     }
 }
-fn execute_cmd(cmd: &mut str) -> Result<(), ()> {
-    match parse_cmd(cmd) {
-        Command::Invite => {
-            client::get_invite_link();
-            Ok(())
-        }
-        // todo
-        Command::Unknown => Ok(()),
-    }
-}
-fn parse_cmd(cmd: &mut str) -> Command {
-    // todo: parse and execute command
-    let words: Vec<&str> = cmd.split_whitespace().collect();
-    if let Some(&"inv") = words.first() {
-        return Command::Invite;
-    }
-    Command::Unknown
-}
 
 fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
     let parent = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
+        .constraints([Constraint::Percentage(85), Constraint::Percentage(15)]) //todo: user config file
         .split(frame.size());
 
     let messages: Vec<ListItem> = app
         .messages
         .iter()
-        .map(|m| {
-            let content = vec![Spans::from(Span::raw(format!(
-                " <{}> {}",
-                app.nth_user(m.user_id).name,
-                m.content
-            )))];
-            ListItem::new(content)
-        })
+        .map(|m| ListItem::new(compose_msg(m, app)))
         .collect();
     let messages = List::new(messages).block(
         Block::default()
+            .title(Spans::from(" Lobby "))
+            .title_alignment(Alignment::Center)
             .borders(BORDERS_DIR)
             .border_type(BORDER_TYPE)
-            .title("Chat")
-            .title_alignment(Alignment::Center)
             .style(Style::default().fg(COLOR_TRON)),
     );
     frame.render_widget(messages, parent[0]);
@@ -127,19 +93,47 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
     let text_box = textbox(&app.input_mode, &app.text_buffer, scroll).wrap(Wrap { trim: false });
     frame.render_widget(text_box, parent[1]);
 
-    if let InputMode::Typing = app.input_mode {
-        // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
-        frame.set_cursor(
-            // Put cursor past the end of the input text
-            parent[1].x + ((app.text_buffer.visual_cursor()).max(scroll) - scroll) as u16 + 1,
-            // Move one line down, from the border to the input line
-            parent[1].y + 1,
-        )
+    match app.input_mode {
+        InputMode::Typing => {
+            // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
+            frame.set_cursor(
+                // Put cursor past the end of the input text
+                parent[1].x + ((app.text_buffer.visual_cursor()).max(scroll) - scroll) as u16 + 1,
+                // Move one line down, from the border to the input line
+                parent[1].y + 1,
+            )
+        }
+        InputMode::Prompt => display_help_popup(frame),
+        _ => {}
     }
-
-    // todo: remove branch
-    if let InputMode::Prompt = app.input_mode {
-        display_help_popup(frame);
+}
+fn compose_msg<'a>(msg: &Message, app: &Session) -> Vec<Spans<'a>> {
+    vec![Spans::from(vec![
+        Span::styled(
+            format!("<{}>", app.nth_user(msg.user_id).name),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(msg.content.to_string()),
+    ])]
+}
+fn execute_cmd(cmd: &mut str) -> Result<(), ()> {
+    // todo
+    match parse_cmd(cmd) {
+        Command::Invite => {
+            server::get_invite_link();
+            Ok(())
+        }
+        Command::Join => {Ok(())},
+        Command::Unknown => Ok(()),
+    }
+}
+fn parse_cmd(cmd: &mut str) -> Command {
+    // todo: parse and execute command
+    let words: Vec<&str> = cmd.split_whitespace().collect();
+    return match words.first() {
+        Some(&"inv") =>  Command::Invite,
+        Some(&"join") =>  Command::Join,
+        _ => Command::Unknown
     }
 }
 
@@ -159,7 +153,7 @@ fn textbox<'a>(state: &InputMode, input: &'a Input, scroll: usize) -> Paragraph<
                 .title(state.to_string()),
         )
 }
-fn construct_paragraph<'a>(message: &'a str) -> Paragraph<'a> {
+fn construct_paragraph(message: & str) -> Paragraph {
     Paragraph::new(message).alignment(Alignment::Center)
 }
 fn display_help_popup<B: Backend>(frame: &mut Frame<B>) {
@@ -167,12 +161,13 @@ fn display_help_popup<B: Backend>(frame: &mut Frame<B>) {
 Normal Mode
 Press * to ****
 Press q to Quit
-Press : to enter Command mode:
+Press : to enter Command mode
 Press t to enter Typing mode
+Press h to show this help message
 Press Esc to Switch back to Normal mode"#;
 
     let commands = construct_paragraph(COMMANDS);
-    display_popup(frame, "Welcome to the End of Line Club", commands);
+    display_popup(frame, " Welcome to the End of Line Club ", commands);
 }
 fn display_popup<B: Backend>(frame: &mut Frame<B>, title: &str, paragraph: Paragraph) {
     let prompt_block = Block::default()
