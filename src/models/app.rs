@@ -24,6 +24,9 @@ pub mod mode {
         }
     }
 }
+use crate::services::server::Server;
+
+use super::commands::Command;
 use super::message::Message;
 use super::user::User;
 use mode::InputMode;
@@ -34,6 +37,7 @@ pub struct Session {
     pub users: Vec<User>,
     pub messages: Vec<Message>,
     pub text_buffer: Input,
+    server: Server,
 }
 
 impl Session {
@@ -54,6 +58,39 @@ impl Session {
         });
         self.text_buffer.reset();
     }
+
+
+    pub fn execute_cmd(&mut self) -> Result<InputMode, ()> {
+        // todo
+        let mut info = String::new();
+        match self.parse_cmd(&mut self.text_buffer.value().to_owned()) {
+            Command::Invite => {
+                cli_clipboard::set_contents(self.server.get_invite_link()).unwrap();
+                info = String::from("Invite Link copied to clipboard");
+            }
+            Command::Join(link) => {
+                self.server
+                    .join(link)
+                    .unwrap_or_else(|_| info = String::from("Failed to join session"));
+            }
+            Command::Unknown => {
+                info = String::from("Unknown Command!");
+            }
+        }
+        self.text_buffer.reset();
+        Ok(InputMode::Info(info))
+    }
+
+    fn parse_cmd(&self, cmd: &mut str) -> Command {
+        // todo: parse and execute command
+        let words: Vec<&str> = cmd.split_whitespace().collect();
+        return match words.first() {
+            Some(&"inv") => Command::Invite,
+            Some(&"join") => if words.len() == 2 { Command::Join(String::from(words[1])) }
+            else { Command::Unknown },
+                _ => Command::Unknown,
+        };
+    }
 }
 
 impl Default for Session {
@@ -63,6 +100,7 @@ impl Default for Session {
             text_buffer: Input::default(),
             users: vec![User::default()],
             messages: vec![],
+            server: Server::new(),
         }
     }
 }

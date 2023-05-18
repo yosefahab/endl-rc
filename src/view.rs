@@ -1,9 +1,6 @@
-use crate::{
-    models::{
-        app::{mode::InputMode, Session},
-        message::Message, user::User,
-    },
-    services::{commands::execute_cmd, server::Server},
+use crate::models::{
+    app::{mode::InputMode, Session},
+    message::Message, user::User,
 };
 use crossterm::event::{poll, read, Event, Event::Key, KeyCode};
 use ratatui::{
@@ -23,7 +20,6 @@ const BORDER_TYPE: BorderType = BorderType::Rounded;
 const BORDERS_DIR: Borders = Borders::ALL;
 
 pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io::Result<()> {
-    let server = Server::new();
     loop {
         terminal.draw(|frame| update_ui(frame, app))?;
         if !poll(Duration::from_millis(100))? {
@@ -48,12 +44,9 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io:
                 },
                 InputMode::Command => match key.code {
                     KeyCode::Esc => app.switch_mode(InputMode::Normal),
-                    KeyCode::Enter => {
-                        match execute_cmd(&mut app.text_buffer.value().to_string(), &server) {
-                            Ok(mode) => app.switch_mode(mode),
-                            Err(()) => return Ok(()),
-                        }
-                        app.text_buffer.reset();
+                    KeyCode::Enter => match app.execute_cmd() {
+                        Ok(mode) => app.switch_mode(mode),
+                        Err(()) => return Ok(()),
                     }
                     _ => { app.text_buffer.handle_event(&Event::Key(key)); }
                 },
@@ -66,25 +59,24 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io:
         }
     }
 }
-
 fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
     let parent = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
         .split(frame.size());
 
-        let messages = app.messages.iter().map(
-            |msg| compose_msg(msg, app.nth_user(msg.user_id))
-            ).collect::<Vec<_>>();
-        let messages = Paragraph::new(messages)
-            .wrap(Wrap {trim: false})
-            .block(Block::default()
-                   .title(Spans::from(" The Grid "))
-                   .title_alignment(Alignment::Center)
-                   .borders(BORDERS_DIR)
-                   .border_type(BORDER_TYPE)
-                   .style(Style::default().fg(COLOR_TRON))
-                  );
+    let messages = app.messages.iter().map(
+        |msg| compose_msg(msg, app.nth_user(msg.user_id))
+        ).collect::<Vec<_>>();
+    let messages = Paragraph::new(messages)
+        .wrap(Wrap {trim: false})
+        .block(Block::default()
+               .title(Spans::from(" The Grid "))
+               .title_alignment(Alignment::Center)
+               .borders(BORDERS_DIR)
+               .border_type(BORDER_TYPE)
+               .style(Style::default().fg(COLOR_TRON))
+              );
     frame.render_widget(messages, parent[0]);
 
     let width = parent[0].width.max(3) - 3; // keep 2 for borders and 1 for cursor
@@ -100,7 +92,7 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
                 parent[1].x + ((app.text_buffer.visual_cursor()).max(scroll) - scroll) as u16 + 1,
                 // Move one line down, from the border to the input line
                 parent[1].y + 1,
-            )
+                )
         }
         InputMode::Info(msg) => display_popup(frame, "INFO", construct_paragraph(msg)),
         InputMode::Help => display_help_popup(frame),
@@ -109,19 +101,19 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
 }
 fn compose_msg<'a>(msg: &Message, user: &User) -> Spans<'a> {
     Spans::from(vec![
-        Span::styled(
-            format!(" <{}>  ", user.name),
-            Style::default()
-            .add_modifier(Modifier::BOLD)
-            .fg(user.color)
-        ),
-        Span::raw(msg.content.to_string()),
+                Span::styled(
+                    format!(" <{}>  ", user.name),
+                    Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(user.color)
+                    ),
+                    Span::raw(msg.content.to_string()),
     ])
 }
 
 fn textbox<'a>(state: &InputMode, input: &'a Input, scroll: usize) -> Paragraph<'a> {
     let style = match state {
-    InputMode::Typing | InputMode::Command => Style::default().fg(COLOR_CLU),
+        InputMode::Typing | InputMode::Command => Style::default().fg(COLOR_CLU),
         _ => Style::default().fg(COLOR_TRON),
     };
     Paragraph::new(input.value())
@@ -129,29 +121,29 @@ fn textbox<'a>(state: &InputMode, input: &'a Input, scroll: usize) -> Paragraph<
         .scroll((0, scroll as u16))
         .block(
             Block::default()
-                .borders(BORDERS_DIR)
-                .border_type(BORDER_TYPE)
-                .title(state.to_string()),
-        )
+            .borders(BORDERS_DIR)
+            .border_type(BORDER_TYPE)
+            .title(state.to_string()),
+            )
 }
 fn construct_paragraph(message: &str) -> Paragraph {
     Paragraph::new(message).alignment(Alignment::Center)
 }
 fn display_help_popup<B: Backend>(frame: &mut Frame<B>) {
     const COMMANDS: &str = r#"
-Normal Mode
-Press * to ****
-Press q to Quit
-Press : to enter Command mode
-Press t to enter Typing mode
-Press h to show this help message
-Press Esc to Switch back to Normal mode"#;
+        Normal Mode
+        Press * to ****
+        Press q to Quit
+        Press : to enter Command mode
+        Press t to enter Typing mode
+        Press h to show this help message
+        Press Esc to Switch back to Normal mode"#;
 
     display_popup(
         frame,
         " Welcome to the End of Line Club ",
         construct_paragraph(COMMANDS),
-    );
+        );
 }
 fn display_popup<B: Backend>(frame: &mut Frame<B>, title: &str, paragraph: Paragraph) {
     let prompt_block = Block::default()
@@ -176,18 +168,18 @@ fn centered_rect(area: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-            Constraint::Percentage(25),
+                     Constraint::Percentage(25),
+                     Constraint::Percentage(50),
+                     Constraint::Percentage(25),
         ])
         .split(area);
 
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-            Constraint::Percentage(25),
+                     Constraint::Percentage(25),
+                     Constraint::Percentage(50),
+                     Constraint::Percentage(25),
         ])
         .split(popup_layout[1])[1]
 }
