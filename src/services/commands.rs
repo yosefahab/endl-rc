@@ -26,7 +26,8 @@ fn parse_cmd(cmd: &mut str) -> Command {
     let words: Vec<&str> = cmd.split_whitespace().collect();
     return match words.first() {
         Some(&"inv") => Command::Invite,
-        Some(&"join") => Command::Join(String::from(words[1])),
+        Some(&"join") => if words.len() == 2 { Command::Join(String::from(words[1])) }
+        else { Command::Unknown },
         _ => Command::Unknown,
     };
 }

@@ -7,7 +7,7 @@ impl Server {
     pub fn get_invite_link(&self) -> String {
         String::from("")
     }
-    pub fn join(&self, link: String) -> Result<(), ()> {
+    pub fn join(&self, _link: String) -> Result<(), ()> {
         Ok(())
     }
 }

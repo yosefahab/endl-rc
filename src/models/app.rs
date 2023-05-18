@@ -34,7 +34,6 @@ pub struct Session {
     pub users: Vec<User>,
     pub messages: Vec<Message>,
     pub text_buffer: Input,
-    pub command_buffer: Input,
 }
 
 impl Session {
@@ -47,11 +46,11 @@ impl Session {
     pub fn switch_mode(&mut self, mode: InputMode) {
         self.input_mode = mode;
     }
-    pub fn send_user_msg(&mut self, user_id: usize, msg: String) {
+    pub fn send_user_msg(&mut self) {
         self.messages.push(Message {
-            user_id,
-            content: msg,
-            color: self.nth_user(user_id).color,
+            user_id: self.root_user().id,
+            content: self.text_buffer.value().into(),
+            color: self.root_user().color,
         });
         self.text_buffer.reset();
     }
@@ -62,7 +61,6 @@ impl Default for Session {
         Self {
             input_mode: InputMode::default(),
             text_buffer: Input::default(),
-            command_buffer: Input::default(),
             users: vec![User::default()],
             messages: vec![],
         }

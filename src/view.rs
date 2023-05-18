@@ -1,7 +1,7 @@
 use crate::{
     models::{
         app::{mode::InputMode, Session},
-        message::Message,
+        message::Message, user::User,
     },
     services::{commands::execute_cmd, server::Server},
 };
@@ -11,8 +11,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::ListItem,
-    widgets::{Block, BorderType, Borders, Clear, List, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame, Terminal,
 };
 use std::{io, time::Duration};
@@ -50,23 +49,18 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io:
                 InputMode::Command => match key.code {
                     KeyCode::Esc => app.switch_mode(InputMode::Normal),
                     KeyCode::Enter => {
-                        match execute_cmd(&mut app.command_buffer.value().to_string(), &server) {
+                        match execute_cmd(&mut app.text_buffer.value().to_string(), &server) {
                             Ok(mode) => app.switch_mode(mode),
                             Err(()) => return Ok(()),
                         }
+                        app.text_buffer.reset();
                     }
-                    _ => {
-                        app.command_buffer.handle_event(&Event::Key(key));
-                    }
+                    _ => { app.text_buffer.handle_event(&Event::Key(key)); }
                 },
                 InputMode::Typing => match key.code {
                     KeyCode::Esc => app.switch_mode(InputMode::Normal),
-                    KeyCode::Enter => {
-                        app.send_user_msg(app.root_user().id, app.text_buffer.value().into())
-                    }
-                    _ => {
-                        app.text_buffer.handle_event(&Event::Key(key));
-                    }
+                    KeyCode::Enter => app.send_user_msg(),
+                    _ => { app.text_buffer.handle_event(&Event::Key(key)); }
                 },
             };
         }
@@ -79,19 +73,18 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
         .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
         .split(frame.size());
 
-    let messages: Vec<ListItem> = app
-        .messages
-        .iter()
-        .map(|m| ListItem::new(compose_msg(m, app)))
-        .collect();
-    let messages = List::new(messages).block(
-        Block::default()
-            .title(Spans::from(" The Grid "))
-            .title_alignment(Alignment::Center)
-            .borders(BORDERS_DIR)
-            .border_type(BORDER_TYPE)
-            .style(Style::default().fg(COLOR_TRON)),
-    );
+        let messages = app.messages.iter().map(
+            |msg| compose_msg(msg, app.nth_user(msg.user_id))
+            ).collect::<Vec<_>>();
+        let messages = Paragraph::new(messages)
+            .wrap(Wrap {trim: false})
+            .block(Block::default()
+                   .title(Spans::from(" The Grid "))
+                   .title_alignment(Alignment::Center)
+                   .borders(BORDERS_DIR)
+                   .border_type(BORDER_TYPE)
+                   .style(Style::default().fg(COLOR_TRON))
+                  );
     frame.render_widget(messages, parent[0]);
 
     let width = parent[0].width.max(3) - 3; // keep 2 for borders and 1 for cursor
@@ -100,7 +93,7 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
     frame.render_widget(text_box, parent[1]);
 
     match &app.input_mode {
-        InputMode::Typing => {
+        InputMode::Typing | InputMode::Command => {
             // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
             frame.set_cursor(
                 // Put cursor past the end of the input text
@@ -109,28 +102,29 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
                 parent[1].y + 1,
             )
         }
-        InputMode::Info(msg) => display_popup(frame, "INFO", construct_paragraph(&msg)),
+        InputMode::Info(msg) => display_popup(frame, "INFO", construct_paragraph(msg)),
         InputMode::Help => display_help_popup(frame),
         _ => {}
     }
 }
-fn compose_msg<'a>(msg: &Message, app: &Session) -> Vec<Spans<'a>> {
-    vec![Spans::from(vec![
+fn compose_msg<'a>(msg: &Message, user: &User) -> Spans<'a> {
+    Spans::from(vec![
         Span::styled(
-            format!(" <{}>  ", app.nth_user(msg.user_id).name),
-            Style::default().add_modifier(Modifier::BOLD),
+            format!(" <{}>  ", user.name),
+            Style::default()
+            .add_modifier(Modifier::BOLD)
+            .fg(user.color)
         ),
         Span::raw(msg.content.to_string()),
-    ])]
+    ])
 }
 
 fn textbox<'a>(state: &InputMode, input: &'a Input, scroll: usize) -> Paragraph<'a> {
-    let text = input.value();
     let style = match state {
-        InputMode::Typing => Style::default().fg(COLOR_CLU),
+    InputMode::Typing | InputMode::Command => Style::default().fg(COLOR_CLU),
         _ => Style::default().fg(COLOR_TRON),
     };
-    Paragraph::new(text)
+    Paragraph::new(input.value())
         .style(style)
         .scroll((0, scroll as u16))
         .block(
