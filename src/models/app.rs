@@ -1,33 +1,33 @@
 pub mod mode {
     pub enum InputMode {
-        Prompt,
         Normal,
         Typing,
         Command,
+        Help,
+        Info(String),
     }
 
     impl Default for InputMode {
         fn default() -> Self {
-            Self::Prompt
+            Self::Help
         }
     }
 
     impl std::fmt::Display for InputMode {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Self::Prompt => write!(f, " Propmt Mode "),
-                Self::Normal => write!(f, " Normal Mode "),
+                Self::Normal | Self::Info(_) => write!(f, " Normal Mode "),
                 Self::Typing => write!(f, " Typing Mode "),
                 Self::Command => write!(f, " Command Mode "),
+                Self::Help => write!(f, " Propmt Mode "),
             }
         }
     }
 }
+use super::message::Message;
+use super::user::User;
 use mode::InputMode;
 use tui_input::Input;
-use super::user::User;
-use super::message::Message;
-
 
 pub struct Session {
     pub input_mode: InputMode,
@@ -51,7 +51,7 @@ impl Session {
         self.messages.push(Message {
             user_id,
             content: msg,
-            color: self.nth_user(user_id).color
+            color: self.nth_user(user_id).color,
         });
         self.text_buffer.reset();
     }

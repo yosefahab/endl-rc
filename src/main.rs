@@ -8,7 +8,7 @@ use crossterm::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-mod client;
+mod services;
 mod models;
 use models::app::Session;
 mod view;

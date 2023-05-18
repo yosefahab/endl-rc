@@ -1,5 +1,5 @@
 pub enum Command {
     Unknown,
     Invite,
-    Join,
+    Join(String),
 }
