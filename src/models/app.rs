@@ -36,12 +36,12 @@ pub struct Session {
     pub users: Vec<User>,
     pub messages: Vec<Message>,
     pub text_buffer: Input,
-    server_tx: Sender<String>,
-    app_rx: Receiver<String>,
+    server_tx: Sender<Message>,
+    app_rx: Receiver<Message>,
 }
 
 impl Session {
-    pub fn new(server_tx: Sender<String>) -> Session {
+    pub fn new(server_tx: Sender<Message>) -> Session {
         Session {
             input_mode: InputMode::default(),
             text_buffer: Input::default(),
@@ -61,24 +61,24 @@ impl Session {
         self.input_mode = mode;
     }
     pub async fn send_user_msg(&mut self) {
-        self.server_tx
-            .send(self.text_buffer.value().into())
-            .unwrap();
+        let _ = self.server_tx.send(Message::new(
+            self.root_user().id,
+            self.text_buffer.value().into(),
+        ));
         // empty the text input field
         self.text_buffer.reset();
     }
     pub async fn listen_for_msgs(&mut self) {
-        let msg = self.app_rx.try_recv();
-        if msg.is_ok() {
+        if let Ok(msg) = self.app_rx.try_recv() {
             self.messages.push(Message {
-                user_id: self.root_user().id,
-                content: msg.unwrap(),
+                user_id: msg.user_id,
+                content: msg.content,
                 color: self.root_user().color,
             });
         }
     }
     pub fn execute_cmd(&mut self) -> Result<InputMode, ()> {
-        // todo
+        // TODO
         let mut info = String::new();
         match self.parse_cmd(&mut self.text_buffer.value().to_owned()) {
             Command::Invite => {

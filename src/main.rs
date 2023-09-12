@@ -10,7 +10,7 @@ use ratatui::Terminal;
 
 mod models;
 mod services;
-use models::app::Session;
+use models::{app::Session, message::Message};
 mod view;
 use tokio::sync::{broadcast, oneshot};
 use view::run_app;
@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // used to signal to server when app_task finishes
     let (exit_signal_tx, exit_signal_rx) = oneshot::channel();
-    let (tx, _rx) = broadcast::channel::<String>(10);
+    let (tx, _rx) = broadcast::channel::<Message>(10);
 
     let tx_clone = tx.clone();
     let server_task = tokio::spawn(async move {

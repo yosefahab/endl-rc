@@ -5,13 +5,15 @@ use tokio::{
     sync::oneshot,
 };
 
+use crate::models::message::Message;
+
 pub struct Server {
     session_link: String,
-    app_channel: broadcast::Sender<String>,
+    app_channel: broadcast::Sender<Message>,
 }
 
 impl Server {
-    pub fn new(app_tx: broadcast::Sender<String>) -> Server {
+    pub fn new(app_tx: broadcast::Sender<Message>) -> Server {
         Server {
             session_link: String::from("localhost:8080"),
             app_channel: app_tx,
@@ -44,14 +46,14 @@ impl Server {
                             break;
                         }
                         // echo back msg
-                        tx.send(line.clone()).unwrap();
-                        line.clear();
+                        tx.send(Message::new(0, line.clone())).unwrap();
+                    line.clear();
                     },
                     // app tries to send a message
                     result = rx.recv() => {
                         let msg = result.unwrap();
                         // write message to socket
-                        socket_writer.write_all(msg.as_bytes()).await.unwrap();
+                        socket_writer.write_all(&msg.as_bytes()).await.unwrap();
                         // tx.send(msg).unwrap();
                     }
                 }
