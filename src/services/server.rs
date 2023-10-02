@@ -41,20 +41,24 @@ impl Server {
                 tokio::select! {
                     // receive message from socket
                     bytes_read = buff_reader.read_line(&mut line) => {
-                        // indicates that connection is closed
-                        if bytes_read.unwrap() == 0 {
-                            break;
-                        }
-                        // echo back msg
-                        tx.send(Message::new(0, line.clone())).unwrap();
+                    // indicates that connection is closed
+                    if bytes_read.unwrap() == 0 {
+                    break;
+                    }
+                    // send the message through the app_channel
+                    // the server will receive this in the next block and echo it back, and the
+                    // app will receive it and add it to buffer
+                    tx.send(Message::new(0, line.clone())).unwrap();
                     line.clear();
                     },
+                    // BUG: this section breaks message sending and receiving
+                    // (trigged by insert mode)
                     // app tries to send a message
                     result = rx.recv() => {
-                        let msg = result.unwrap();
-                        // write message to socket
-                        socket_writer.write_all(&msg.as_bytes()).await.unwrap();
-                        // tx.send(msg).unwrap();
+                    let msg = result.unwrap();
+                    // write message to socket
+                    socket_writer.write_all(msg.content.as_bytes()).await.unwrap();
+                    // socket_writer.write_all(&msg.as_bytes()).await.unwrap();
                     }
                 }
             }

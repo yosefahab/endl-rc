@@ -14,7 +14,7 @@ impl Message {
             color: Color::LightYellow,
         }
     }
-    pub fn as_bytes(self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.extend(self.user_id.to_be_bytes());
         bytes.extend(self.content.as_bytes());

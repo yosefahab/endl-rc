@@ -19,12 +19,13 @@ const COLOR_CLU: Color = Color::Rgb(235, 124, 57);
 const COLOR_TRON: Color = Color::LightBlue;
 const BORDER_TYPE: BorderType = BorderType::Rounded;
 const BORDERS_DIR: Borders = Borders::ALL;
+const MSG_REFRESH_RATE_MS: u64 = 100;
 
 pub async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io::Result<()> {
     loop {
         app.listen_for_msgs().await;
         terminal.draw(|frame| update_ui(frame, app))?;
-        if !poll(Duration::from_millis(100))? {
+        if !poll(Duration::from_millis(MSG_REFRESH_RATE_MS))? {
             continue;
         }
 
@@ -41,7 +42,7 @@ pub async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) 
                     KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
                     KeyCode::Char('h') => app.switch_mode(InputMode::Help),
                     KeyCode::Char('Q') => return Ok(()),
-                    // todo: other functionalities (scroll)
+                    // TODO: other functionalities (scroll)
                     _ => (),
                 },
                 InputMode::Command => match key.code {
@@ -106,6 +107,7 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
         _ => {}
     }
 }
+/// Composes a user message to be rendered
 fn compose_msg<'a>(msg: &Message, user: &User) -> Line<'a> {
     Line::from(vec![
         Span::styled(

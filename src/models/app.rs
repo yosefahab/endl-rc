@@ -28,7 +28,7 @@ use super::commands::Command;
 use super::message::Message;
 use super::user::User;
 use mode::InputMode;
-use tokio::sync::broadcast::{Receiver, Sender};
+use tokio::sync::broadcast;
 use tui_input::Input;
 
 pub struct Session {
@@ -36,12 +36,12 @@ pub struct Session {
     pub users: Vec<User>,
     pub messages: Vec<Message>,
     pub text_buffer: Input,
-    server_tx: Sender<Message>,
-    app_rx: Receiver<Message>,
+    server_tx: broadcast::Sender<Message>,
+    app_rx: broadcast::Receiver<Message>,
 }
 
 impl Session {
-    pub fn new(server_tx: Sender<Message>) -> Session {
+    pub fn new(server_tx: broadcast::Sender<Message>) -> Session {
         Session {
             input_mode: InputMode::default(),
             text_buffer: Input::default(),
@@ -61,10 +61,12 @@ impl Session {
         self.input_mode = mode;
     }
     pub async fn send_user_msg(&mut self) {
-        let _ = self.server_tx.send(Message::new(
-            self.root_user().id,
-            self.text_buffer.value().into(),
-        ));
+        self.server_tx
+            .send(Message::new(
+                self.root_user().id,
+                self.text_buffer.value().into(),
+            ))
+            .unwrap();
         // empty the text input field
         self.text_buffer.reset();
     }
