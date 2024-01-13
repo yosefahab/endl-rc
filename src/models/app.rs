@@ -36,19 +36,19 @@ pub struct Session {
     pub users: Vec<User>,
     pub messages: Vec<Message>,
     pub text_buffer: Input,
-    server_tx: broadcast::Sender<Message>,
-    app_rx: broadcast::Receiver<Message>,
+    messages_tx: broadcast::Sender<Message>,
+    messages_rx: broadcast::Receiver<Message>,
 }
 
 impl Session {
-    pub fn new(server_tx: broadcast::Sender<Message>) -> Session {
+    pub fn new(messages_tx: broadcast::Sender<Message>) -> Session {
         Session {
             input_mode: InputMode::default(),
             text_buffer: Input::default(),
             users: vec![User::default()],
             messages: vec![],
-            app_rx: server_tx.subscribe(),
-            server_tx,
+            messages_rx: messages_tx.subscribe(),
+            messages_tx,
         }
     }
     pub fn root_user(&self) -> &User {
@@ -61,17 +61,17 @@ impl Session {
         self.input_mode = mode;
     }
     pub async fn send_user_msg(&mut self) {
-        self.server_tx
+        self.messages_tx
             .send(Message::new(
                 self.root_user().id,
-                self.text_buffer.value().into(),
+                format!("{}\n", self.text_buffer.value()),
             ))
             .unwrap();
         // empty the text input field
         self.text_buffer.reset();
     }
     pub async fn listen_for_msgs(&mut self) {
-        if let Ok(msg) = self.app_rx.try_recv() {
+        if let Ok(msg) = self.messages_rx.recv().await {
             self.messages.push(Message {
                 user_id: msg.user_id,
                 content: msg.content,
@@ -96,6 +96,9 @@ impl Session {
             Command::Unknown => {
                 info = String::from("Unknown Command!");
             }
+            Command::Quit => {
+                return Err(());
+            }
         }
         self.text_buffer.reset();
         Ok(InputMode::Info(info))
@@ -105,6 +108,7 @@ impl Session {
         // todo: parse and execute command
         let words: Vec<&str> = cmd.split_whitespace().collect();
         return match words.first() {
+            Some(&"quit") => Command::Quit,
             Some(&"inv") => Command::Invite,
             Some(&"join") => {
                 if words.len() == 2 {

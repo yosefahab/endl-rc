@@ -21,48 +21,58 @@ const BORDER_TYPE: BorderType = BorderType::Rounded;
 const BORDERS_DIR: Borders = Borders::ALL;
 const MSG_REFRESH_RATE_MS: u64 = 100;
 
-pub async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Session) -> io::Result<()> {
+pub async fn start_renderer<B: Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut Session,
+) -> io::Result<()> {
     loop {
-        app.listen_for_msgs().await;
         terminal.draw(|frame| update_ui(frame, app))?;
-        if !poll(Duration::from_millis(MSG_REFRESH_RATE_MS))? {
-            continue;
-        }
-
-        if let Key(key) = read()? {
-            match app.input_mode {
-                InputMode::Help | InputMode::Info(_) => match key.code {
-                    KeyCode::Char(':') => app.switch_mode(InputMode::Command),
-                    KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
-                    KeyCode::Char('Q') => return Ok(()),
-                    _ => app.switch_mode(InputMode::Normal),
-                },
-                InputMode::Normal => match key.code {
-                    KeyCode::Char(':') => app.switch_mode(InputMode::Command),
-                    KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
-                    KeyCode::Char('h') => app.switch_mode(InputMode::Help),
-                    KeyCode::Char('Q') => return Ok(()),
-                    // TODO: other functionalities (scroll)
-                    _ => (),
-                },
-                InputMode::Command => match key.code {
-                    KeyCode::Esc => app.switch_mode(InputMode::Normal),
-                    KeyCode::Enter => match app.execute_cmd() {
-                        Ok(mode) => app.switch_mode(mode),
-                        Err(()) => return Ok(()),
-                    },
-                    _ => {
-                        app.text_buffer.handle_event(&Event::Key(key));
+        let key_listener = tokio::spawn(async {
+            if poll(Duration::from_millis(MSG_REFRESH_RATE_MS)).unwrap() {
+                if let Key(key) = read().unwrap() {
+                    Some(key)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+        tokio::select! {
+            _ = app.listen_for_msgs() => {},
+            k = key_listener => {
+                if let Some(key) = k.unwrap() {
+                    match app.input_mode {
+                        InputMode::Help | InputMode::Info(_) => match key.code {
+                            KeyCode::Char(':') => app.switch_mode(InputMode::Command),
+                            KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
+                            KeyCode::Char('Q') => return Ok(()),
+                            _ => app.switch_mode(InputMode::Normal),
+                        },
+                        InputMode::Normal => match key.code {
+                            KeyCode::Char(':') => app.switch_mode(InputMode::Command),
+                            KeyCode::Char('t') => app.switch_mode(InputMode::Typing),
+                            KeyCode::Char('h') => app.switch_mode(InputMode::Help),
+                            KeyCode::Char('Q') => return Ok(()),
+                            // TODO: other functionalities (scroll)
+                            _ => (),
+                        },
+                        InputMode::Command => match key.code {
+                            KeyCode::Esc => app.switch_mode(InputMode::Normal),
+                            KeyCode::Enter => match app.execute_cmd() {
+                                Ok(mode) => app.switch_mode(mode),
+                                Err(()) => return Ok(()), // gracefully shutdown
+                            },
+                            _ => { app.text_buffer.handle_event(&Event::Key(key)); }
+                        },
+                        InputMode::Typing => match key.code {
+                            KeyCode::Esc => app.switch_mode(InputMode::Normal),
+                            KeyCode::Enter => app.send_user_msg().await,
+                            _ => { app.text_buffer.handle_event(&Event::Key(key)); }
+                        },
                     }
-                },
-                InputMode::Typing => match key.code {
-                    KeyCode::Esc => app.switch_mode(InputMode::Normal),
-                    KeyCode::Enter => app.send_user_msg().await,
-                    _ => {
-                        app.text_buffer.handle_event(&Event::Key(key));
-                    }
-                },
-            };
+                }
+            }
         }
     }
 }
@@ -72,6 +82,7 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
         .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
         .split(frame.size());
 
+    // TODO: cache previous messages to avoid re-iterating and recreating the vector each time
     let messages = app
         .messages
         .iter()

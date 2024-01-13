@@ -11,9 +11,9 @@ use ratatui::Terminal;
 mod models;
 mod services;
 use models::{app::Session, message::Message};
-mod view;
+mod views;
 use tokio::sync::{broadcast, oneshot};
-use view::run_app;
+use views::renderer::start_renderer;
 
 use crate::services::server::Server;
 
@@ -26,19 +26,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // used to signal to server when app_task finishes
+    // used to signal to server when renderer_task finishes
     let (exit_signal_tx, exit_signal_rx) = oneshot::channel();
-    let (tx, _rx) = broadcast::channel::<Message>(10);
+    let (messages_tx, _messages_rx) = broadcast::channel::<Message>(10);
 
-    let tx_clone = tx.clone();
+    let messages_tx_clone = messages_tx.clone();
     let server_task = tokio::spawn(async move {
-        let mut server = Server::new(tx_clone);
-        let _ = server.start(exit_signal_rx).await;
+        let mut server = Server::new(messages_tx_clone);
+        server.start(exit_signal_rx).await
     });
-    let app_task = tokio::spawn(async move {
-        let _ = run_app(&mut terminal, &mut Session::new(tx)).await;
-        let _ = exit_signal_tx.send(true);
-        // signal to server to shutdown
+    let renderer_task = tokio::spawn(async move {
+        let _ = start_renderer(&mut terminal, &mut Session::new(messages_tx)).await;
+        let _ = exit_signal_tx.send(true); // signal to server to shutdown
         let _ = disable_raw_mode();
         execute!(
             terminal.backend_mut(),
@@ -46,11 +45,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             DisableMouseCapture
         )
         .unwrap();
-        terminal.show_cursor().unwrap();
+        let _ = terminal.show_cursor();
     });
-    let (app_res, server_res) = tokio::join!(app_task, server_task);
+    let (renderer_res, server_res) = tokio::join!(renderer_task, server_task);
 
-    if app_res.is_err() || server_res.is_err() {
+    if renderer_res.is_err() || server_res.is_err() {
         eprintln!("Error during shutdown");
     }
     Ok(())
