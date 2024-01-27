@@ -1,3 +1,4 @@
+use ratatui::style::Color;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
@@ -46,7 +47,7 @@ impl Server {
                     if let Ok(0) = bytes_read { break; }
                     let new_msg = line.clone();
                     // TODO: actually de-serialize the incoming message to figure out which user sent it
-                    server_app_messages_tx.send(Message::new(0, new_msg)).unwrap();
+                    if server_app_messages_tx.send(Message::new(new_msg, Color::LightYellow, String::from("Program"))).is_err() { return }
                     line.clear();
                 }
                 // user messages

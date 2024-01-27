@@ -2,17 +2,17 @@ use ratatui::style::Color;
 
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub user_id: usize,
     pub content: String,
     pub color: Color,
+    pub source: String,
 }
 
 impl Message {
-    pub fn new(user_id: usize, content: String) -> Self {
+    pub fn new(content: String, color: Color, source: String) -> Self {
         Self {
-            user_id,
             content,
-            color: Color::LightYellow,
+            color,
+            source,
         }
     }
     pub fn as_bytes(&self) -> Vec<u8> {
@@ -54,9 +54,9 @@ impl Message {
 
         // Use a default color for now
         Self {
-            user_id,
             content: content.to_string(),
-            color: Color::LightYellow, // Assuming a default color
+            color: Color::LightYellow,
+            source: String::from("Program"),
         }
     }
 }

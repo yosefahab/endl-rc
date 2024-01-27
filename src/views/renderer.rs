@@ -1,4 +1,4 @@
-use crate::models::{message::Message, modes::InputMode, session::Session, user::User};
+use crate::models::{message::Message, modes::InputMode, session::Session};
 use crossterm::event::{poll, read, Event, Event::Key, KeyCode};
 use ratatui::{
     backend::Backend,
@@ -12,7 +12,7 @@ use std::{io, time::Duration};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
 const COLOR_CLU: Color = Color::Rgb(235, 124, 57);
-const COLOR_TRON: Color = Color::LightBlue;
+pub const COLOR_TRON: Color = Color::LightBlue;
 const BORDER_TYPE: BorderType = BorderType::Rounded;
 const BORDERS_DIR: Borders = Borders::ALL;
 const MSG_REFRESH_RATE_MS: u64 = 100;
@@ -79,11 +79,7 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
         .split(frame.size());
 
     // TODO: cache previous messages to avoid re-iterating and recreating the vector each time
-    let messages = app
-        .messages
-        .iter()
-        .map(|msg| compose_msg(msg, app.nth_user(msg.user_id)))
-        .collect::<Vec<_>>();
+    let messages = app.messages.iter().map(compose_msg).collect::<Vec<_>>();
     let messages = Paragraph::new(messages).wrap(Wrap { trim: false }).block(
         Block::default()
             .title(Line::from(" The Grid "))
@@ -115,11 +111,11 @@ fn update_ui<B: Backend>(frame: &mut Frame<B>, app: &mut Session) {
     }
 }
 /// Composes a user message to be rendered
-fn compose_msg<'a>(msg: &Message, user: &User) -> Line<'a> {
+fn compose_msg<'a>(msg: &Message) -> Line<'a> {
     Line::from(vec![
         Span::styled(
-            format!(" <{}>  ", user.name),
-            Style::default().add_modifier(Modifier::BOLD).fg(user.color),
+            format!(" <{}>  ", msg.source),
+            Style::default().add_modifier(Modifier::BOLD).fg(msg.color),
         ),
         Span::raw(msg.content.to_string()),
     ])

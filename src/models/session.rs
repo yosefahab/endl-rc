@@ -4,6 +4,7 @@ use super::commands::Command;
 use super::message::Message;
 use super::modes::InputMode;
 use super::user::User;
+use ratatui::style::Color;
 use tokio::sync::{broadcast, watch};
 use tui_input::Input;
 
@@ -45,8 +46,9 @@ impl Session {
     }
     pub async fn send_user_msg(&mut self) {
         let msg = Message::new(
-            self.root_user().id,
             format!("{}\n", self.text_buffer.value()),
+            crate::views::renderer::COLOR_TRON,
+            String::from("User"),
         );
         if self.outgoing_messages_tx.send(msg.clone()).is_ok() {
             self.messages.push(msg);
