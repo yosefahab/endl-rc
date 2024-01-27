@@ -3,4 +3,5 @@ pub enum Command {
     Invite,
     Join(String),
     Quit,
+    Run,
 }

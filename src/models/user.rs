@@ -10,7 +10,7 @@ impl Default for User {
     fn default() -> Self {
         Self {
             id: 0,                     // root user
-            name: String::from("You"), // todo: read user from file
+            name: String::from("You"), // TODO: read user from file
             color: Color::LightBlue,
         }
     }

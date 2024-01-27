@@ -1,4 +1,5 @@
-pub mod app;
 pub mod commands;
-pub mod user;
 pub mod message;
+pub mod modes;
+pub mod session;
+pub mod user;

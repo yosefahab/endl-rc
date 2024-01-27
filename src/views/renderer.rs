@@ -1,8 +1,4 @@
-use crate::models::{
-    app::{mode::InputMode, Session},
-    message::Message,
-    user::User,
-};
+use crate::models::{message::Message, modes::InputMode, session::Session, user::User};
 use crossterm::event::{poll, read, Event, Event::Key, KeyCode};
 use ratatui::{
     backend::Backend,
@@ -27,7 +23,7 @@ pub async fn start_renderer<B: Backend>(
 ) -> io::Result<()> {
     loop {
         terminal.draw(|frame| update_ui(frame, app))?;
-        let key_listener = tokio::spawn(async {
+        let listen_for_keys = tokio::spawn(async {
             if poll(Duration::from_millis(MSG_REFRESH_RATE_MS)).unwrap() {
                 if let Key(key) = read().unwrap() {
                     Some(key)
@@ -40,7 +36,7 @@ pub async fn start_renderer<B: Backend>(
         });
         tokio::select! {
             _ = app.listen_for_msgs() => {},
-            k = key_listener => {
+            k = listen_for_keys => {
                 if let Some(key) = k.unwrap() {
                     match app.input_mode {
                         InputMode::Help | InputMode::Info(_) => match key.code {
@@ -157,7 +153,8 @@ Press <t> to enter Typing mode
 Press <h> to show this help message
 
 Command Mode
-Enter "join <link>" to join a session
+Enter "join <link>" to join a room
+Enter "run" to start hosting a room
 Enter "inv" to copy session link to clipboard
 Press <Esc> to Switch back to Normal mode"#;
 
